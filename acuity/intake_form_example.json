@@ -1,0 +1,160 @@
+{
+  "appointment_id": 1624592182,
+  "client_name": "Damian Bossio",
+  "email": "damian.bossio@gmail.com",
+  "phone": "+19147153266",
+  "datetime": "2026-03-31T17:00:00-0400",
+  "appointment_type": "FREE | Product Development Help Desk | Eric Chan (VIRTUAL)",
+  "forms": [
+    {
+      "id": 2864898,
+      "name": "2025 Product Dev Help Desk | Client Intake Form",
+      "values": [
+        {
+          "id": 6444239978,
+          "fieldID": 16151875,
+          "value": "Alumnus",
+          "name": "What is your current NYU status?"
+        },
+        {
+          "id": 6444239980,
+          "fieldID": 16151876,
+          "value": "db662",
+          "name": "What is/was your NYU Net ID? (e.g. abc123)"
+        },
+        {
+          "id": 6444239982,
+          "fieldID": 16151877,
+          "value": "Leonard N. Stern School of Business",
+          "name": "What is your NYU school affiliation?"
+        },
+        {
+          "id": 6444239984,
+          "fieldID": 16151878,
+          "value": "Business Management",
+          "name": "Current Students and Alumni: What is/was your degree/program (e.g., B.S. in Economics)?"
+        },
+        {
+          "id": 6444239986,
+          "fieldID": 16151879,
+          "value": "N/A",
+          "name": "If you are an MBA Student, what is your MBA status?"
+        },
+        {
+          "id": 6444239988,
+          "fieldID": 16151880,
+          "value": "1996",
+          "name": "What is/was your graduation year? "
+        },
+        {
+          "id": 6444239990,
+          "fieldID": 16151881,
+          "value": "Damian Bossio - NYU alum ",
+          "name": "List all the names of all other founding team members and their NYU affiliations, if any (student/faculty, school, degree/program, graduation year). "
+        },
+        {
+          "id": 6444239991,
+          "fieldID": 16151882,
+          "value": "North American Renewables",
+          "name": "What is your venture name?"
+        },
+        {
+          "id": 6444239993,
+          "fieldID": 16151883,
+          "value": "Idea",
+          "name": "What is your venture stage?"
+        },
+        {
+          "id": 6444239995,
+          "fieldID": 16151884,
+          "value": "Yes",
+          "name": "Are you a first-time founder? (Check all that apply)"
+        },
+        {
+          "id": 6444239997,
+          "fieldID": 17188387,
+          "value": "",
+          "name": "Please share your LinkedIn profile."
+        },
+        {
+          "id": 6444240000,
+          "fieldID": 16151885,
+          "value": "",
+          "name": "What's your website / landing page url?"
+        },
+        {
+          "id": 6444240001,
+          "fieldID": 16151886,
+          "value": "We are addressing the critical challenge of managing and repurposing end of life electric vehicle batteries for the entire transportation industry (personal vehicle, over the road &amp; long haul trucking, railroad industry, marine, and airline industry). ",
+          "name": "How would you describe your venture and its unique value proposition?"
+        },
+        {
+          "id": 6444240002,
+          "fieldID": 16151956,
+          "value": "Energy solution, Software/SaaS product",
+          "name": "What type of product do you have? (Select any/all that apply)"
+        },
+        {
+          "id": 6444240003,
+          "fieldID": 16151973,
+          "value": "n/a",
+          "name": "If you selected \"Other\" above, please briefly elaborate."
+        },
+        {
+          "id": 6444240004,
+          "fieldID": 16151887,
+          "value": "1) Redwood Materials. We differ in our modular infrastructure, traceability technology, and regional specialization. \n2) Glencore Battery Recycling. We differ in reuse and traceability. ",
+          "name": "Who are your top 2-3 competitors? And how are you differentiated?"
+        },
+        {
+          "id": 6444240005,
+          "fieldID": 16151970,
+          "value": "Obtaining feedstock (used ev batteries and materials) and equipment needed to extract materials.",
+          "name": "What challenges are you running into with regards to product development?"
+        },
+        {
+          "id": 6444240006,
+          "fieldID": 16151890,
+          "value": "Is there a way for me to put a prototype product together to show to venture capitalists, and to use for MRV purposes. ",
+          "name": "What specific questions do you have for this session?"
+        },
+        {
+          "id": 6444240007,
+          "fieldID": 16151891,
+          "value": "",
+          "name": "If you have any product photos or prototype designs, please upload them here."
+        },
+        {
+          "id": 6444240008,
+          "fieldID": 16151892,
+          "value": "yes",
+          "name": "Is this your first time using Start Up Advising from the Berkley Center for Entrepreneurship? If so, please first book a 'Startup Essentials' appointment."
+        },
+        {
+          "id": 6444240009,
+          "fieldID": 16151893,
+          "value": "",
+          "name": "If no, which of the following help desks have you used before?"
+        },
+        {
+          "id": 6444240010,
+          "fieldID": 16151894,
+          "value": "No",
+          "name": "Have you previously engaged with other services offered by the Berkley Center? "
+        },
+        {
+          "id": 6444240011,
+          "fieldID": 16151895,
+          "value": "Email/Newsletter",
+          "name": "How did you first hear about the Berkley Center? "
+        },
+        {
+          "id": 6444240012,
+          "fieldID": 16151896,
+          "value": "yes",
+          "name": "All Startup Advising appointments at the Berkley Center for Entrepreneurship are free of charge. Your credit card is required to book, but you will ONLY be charged in the event of a no-show or late cancellation, evaluated on a case-by-case basis. "
+        }
+      ]
+    }
+  ]
+}
