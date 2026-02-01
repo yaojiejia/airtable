@@ -1,28 +1,28 @@
 """
-Acuity Scheduling API script to detect new intake form submissions.
+Acuity Scheduling API utilities.
+Backward-compatible wrapper around acuity_client.
 """
-
-import requests
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional
 import json
+import sys
 import os
-from dotenv import load_dotenv
+from typing import List, Dict, Optional
 
-# Load environment variables
-load_dotenv()
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-# Get Acuity credentials from environment
-ACUITY_USER_ID = os.getenv("ACUITY_USER_ID")
-ACUITY_API_KEY = os.getenv("ACUITY_API_KEY")
-BASE_URL = "https://acuityscheduling.com/api/v1"
+from acuity.acuity_client import AcuityClient, IntakeFormService
+from config import config
+
+ACUITY_USER_ID = config.ACUITY_USER_ID
+ACUITY_API_KEY = config.ACUITY_API_KEY
+BASE_URL = config.ACUITY_BASE_URL
 
 
 class AcuityIntakeChecker:
-    """Class to interact with Acuity Scheduling API and check for intake forms."""
+    """Wrapper for AcuityClient and IntakeFormService."""
     
     def __init__(self, user_id: str, api_key: str):
-        """Initialize with Acuity credentials."""
+        self._client = AcuityClient(user_id, api_key)
+        self._service = IntakeFormService(self._client)
         self.auth = (user_id, api_key)
         self.base_url = BASE_URL
     
@@ -32,167 +32,27 @@ class AcuityIntakeChecker:
         max_date: Optional[str] = None,
         max_results: int = 100
     ) -> List[Dict]:
-        """
-        Fetch appointments from Acuity.
-        
-        Args:
-            min_date: Start date in YYYY-MM-DD format (defaults to today)
-            max_date: End date in YYYY-MM-DD format
-            max_results: Maximum number of results to return
-            
-        Returns:
-            List of appointment dictionaries
-        """
-        url = f"{self.base_url}/appointments"
-        
-        params = {
-            "max": max_results
-        }
-        
-        if min_date:
-            params["minDate"] = min_date
-        if max_date:
-            params["maxDate"] = max_date
-        
-        try:
-            response = requests.get(url, auth=self.auth, params=params)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            print(f"Error fetching appointments: {e}")
-            return []
+        return self._client.get_appointments(min_date, max_date, max_results)
     
-    def get_recent_appointments_with_forms(self, hours: int = 24, include_canceled: bool = False) -> List[Dict]:
-        """
-        Get appointments from the last N hours that have intake forms filled out.
-        
-        Args:
-            hours: Number of hours to look back (default: 24)
-            include_canceled: Include cancelled appointments (default: False)
-            
-        Returns:
-            List of appointments with intake form data
-        """
-        from dateutil import parser as date_parser
-        from datetime import timezone
-        
-        # Calculate date range - use UTC timezone-aware datetime
-        now = datetime.now(timezone.utc)
-        cutoff_datetime = now - timedelta(hours=hours)
-        
-        # Acuity API only accepts dates (YYYY-MM-DD), not timestamps
-        # So we need to fetch from the date and then filter by time on client side
-        min_date = cutoff_datetime.strftime("%Y-%m-%d")
-        
-        appointments = self.get_appointments(min_date=min_date)
-        
-        # Filter appointments that:
-        # 1. Have intake forms
-        # 2. Are within the hour window (client-side filtering)
-        # 3. Are not cancelled (unless include_canceled=True)
-        appointments_with_forms = []
-        for apt in appointments:
-            # Check if has forms
-            if not apt.get("forms") or len(apt.get("forms", [])) == 0:
-                continue
-            
-            # Check if cancelled
-            if not include_canceled and apt.get("canceled", False):
-                continue
-            
-            # Check if within hour window (use datetimeCreated for when form was filled)
-            datetime_created = apt.get("datetimeCreated")
-            if datetime_created:
-                try:
-                    # Parse the datetime (format: "2026-01-27T10:59:36-0600")
-                    apt_datetime = date_parser.parse(datetime_created)
-                    
-                    # Convert to UTC for proper comparison
-                    if apt_datetime.tzinfo is not None:
-                        apt_datetime_utc = apt_datetime.astimezone(timezone.utc)
-                    else:
-                        # If no timezone, assume local and convert to UTC
-                        apt_datetime_utc = apt_datetime.replace(tzinfo=timezone.utc)
-                    
-                    # Only include if created after cutoff
-                    if apt_datetime_utc >= cutoff_datetime:
-                        appointments_with_forms.append(apt)
-                except Exception as e:
-                    # Skip appointments with unparseable datetimes
-                    print(f"Warning: Skipping appointment {apt.get('id')} - could not parse datetime: {e}")
-                    continue
-            else:
-                # Skip appointments without datetime
-                continue
-        
-        return appointments_with_forms
+    def get_recent_appointments_with_forms(
+        self, 
+        hours: int = 24, 
+        include_canceled: bool = False
+    ) -> List[Dict]:
+        return self._client.get_appointments_with_forms(hours, include_canceled)
     
-    def get_new_intake_forms(self, hours: int = 1, include_canceled: bool = False) -> List[Dict]:
-        """
-        Get NEW intake forms submitted in the last N hours.
-        Useful for checking recently submitted forms.
-        
-        Args:
-            hours: Number of hours to look back (default: 1)
-            include_canceled: Include cancelled appointments (default: False)
-            
-        Returns:
-            List of appointments with their intake form responses (excludes cancelled by default)
-        """
-        appointments = self.get_recent_appointments_with_forms(hours=hours, include_canceled=include_canceled)
-        
-        results = []
-        for apt in appointments:
-            # Extract key information
-            intake_data = {
-                "appointment_id": apt.get("id"),
-                "client_name": f"{apt.get('firstName', '')} {apt.get('lastName', '')}",
-                "email": apt.get("email"),
-                "phone": apt.get("phone"),
-                "datetime": apt.get("datetime"),
-                "appointment_type": apt.get("type"),
-                "forms": apt.get("forms", [])
-            }
-            results.append(intake_data)
-        
-        return results
+    def get_new_intake_forms(
+        self, 
+        hours: int = 1, 
+        include_canceled: bool = False
+    ) -> List[Dict]:
+        return self._service.get_recent_forms(hours, include_canceled)
     
     def get_appointment_by_id(self, appointment_id: int) -> Optional[Dict]:
-        """
-        Get a specific appointment by ID.
-        
-        Args:
-            appointment_id: The Acuity appointment ID
-            
-        Returns:
-            Appointment dictionary or None
-        """
-        url = f"{self.base_url}/appointments/{appointment_id}"
-        
-        try:
-            response = requests.get(url, auth=self.auth)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            print(f"Error fetching appointment {appointment_id}: {e}")
-            return None
+        return self._client.get_appointment_by_id(appointment_id)
     
     def fetch_one_record(self, hours: int = 24) -> Optional[Dict]:
-        """
-        Fetch one intake form record and return it as a dictionary.
-        
-        Args:
-            hours: Number of hours to look back (default: 24)
-            
-        Returns:
-            Single appointment dictionary or None if no forms found
-        """
-        forms = self.get_new_intake_forms(hours=hours)
-        
-        if not forms:
-            return None
-        
-        return forms[0]
+        return self._service.get_single_form(hours)
     
     def print_one_record_as_json(self, hours: int = 24):
         """
