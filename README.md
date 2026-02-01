@@ -255,10 +255,10 @@ python example.py 3  # CSV export
 
 ### Business Use Case Example
 
-Complete implementation of a production workflow:
+Implementation of your specific business logic:
 
 ```bash
-# See all workflows
+# See all options
 python example_business_use_case.py
 
 # Run daily sync (24 hours)
@@ -267,17 +267,8 @@ python example_business_use_case.py 1
 # Run daily sync (48 hours)
 python example_business_use_case.py 2
 
-# Analyze form types
-python example_business_use_case.py 3
-
-# Check field coverage
-python example_business_use_case.py 4
-
-# Generate weekly report
-python example_business_use_case.py 5
-
 # Production scheduled sync
-python example_business_use_case.py 6 48
+python example_business_use_case.py 3 48
 ```
 
 This example demonstrates:
@@ -285,8 +276,7 @@ This example demonstrates:
 - Automatic "Last Update" timestamp
 - CSV export grouped by form type
 - Including cancelled appointments
-- Field coverage analysis
-- Weekly reporting
+- Production-ready with error handling
 
 ## Implementing Your Business Logic
 

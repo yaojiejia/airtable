@@ -1,8 +1,7 @@
 """
-Example Business Use Case: Daily Student Profile Sync
+Business Use Case Example: Daily Student Profile Sync
 
-This example demonstrates how to implement a daily sync workflow
-that was previously in main.py using the generic SDK.
+Demonstrates implementing your specific business logic using the generic SDK.
 """
 import sys
 from datetime import datetime
@@ -64,99 +63,6 @@ def daily_student_sync(lookback_hours=24):
     return results
 
 
-def analyze_form_types():
-    """
-    Analyze what form types are available and their field structure.
-    Useful for understanding data before syncing.
-    """
-    print("="*80)
-    print("FORM TYPE ANALYSIS")
-    print("="*80 + "\n")
-    
-    sdk = AcuityAirtableSDK()
-    
-    form_types = sdk.acuity.get_all_form_types(hours=168)
-    
-    print(f"Found {len(form_types)} different form types:\n")
-    
-    for i, form_type in enumerate(form_types, 1):
-        columns = sdk.acuity.get_columns_by_form_type(form_type, hours=168)
-        print(f"{i}. {form_type}")
-        print(f"   Total fields: {len(columns['all_fields'])}")
-        print(f"   Top-level: {len(columns['top_level'])}")
-        print(f"   Form fields: {len(columns['form_fields'])}")
-        print()
-
-
-def compare_fields_coverage():
-    """
-    Compare Acuity fields with Airtable Student Profile table.
-    Shows what will be synced and what won't.
-    """
-    print("="*80)
-    print("FIELD COVERAGE ANALYSIS")
-    print("="*80 + "\n")
-    
-    sdk = AcuityAirtableSDK()
-    
-    sdk.airtable.use_table("Student Profile")
-    
-    forms = sdk.acuity.get_intake_forms(hours=168)
-    
-    if not forms:
-        print("No forms found to analyze")
-        return
-    
-    print(f"Analyzing {len(forms)} form(s)...\n")
-    
-    for form in forms[:5]:
-        comparison = sdk.get_field_comparison(form)
-        
-        total_acuity = len(comparison['matching']) + len(comparison['only_in_acuity'])
-        coverage = len(comparison['matching']) / total_acuity * 100 if total_acuity > 0 else 0
-        
-        print(f"Form: {form.get('appointment_type')}")
-        print(f"Client: {form.get('client_name')}")
-        print(f"  Matching fields: {len(comparison['matching'])}")
-        print(f"  Only in Acuity: {len(comparison['only_in_acuity'])}")
-        print(f"  Coverage: {coverage:.1f}%")
-        print()
-
-
-def weekly_report():
-    """
-    Generate weekly report of all intake forms.
-    Exports CSVs grouped by form type for analysis.
-    """
-    print("="*80)
-    print("WEEKLY REPORT GENERATION")
-    print("="*80 + "\n")
-    
-    sdk = AcuityAirtableSDK()
-    
-    print("Exporting last 7 days of data...")
-    
-    csv_files = sdk.export_to_csv(
-        hours=168,
-        include_canceled=True,
-        group_by_appointment_type=True,
-        output_dir="weekly_reports"
-    )
-    
-    print(f"\nGenerated {len(csv_files)} report file(s):")
-    
-    forms = sdk.acuity.get_intake_forms(hours=168, include_canceled=True)
-    form_counts = {}
-    
-    for form in forms:
-        form_type = form.get('appointment_type', 'Unknown')
-        form_counts[form_type] = form_counts.get(form_type, 0) + 1
-    
-    for form_type, filepath in csv_files.items():
-        count = form_counts.get(form_type, 0)
-        print(f"  {form_type}: {count} form(s) -> {filepath}")
-    
-    print()
 
 
 def scheduled_sync():
@@ -188,10 +94,7 @@ if __name__ == "__main__":
     use_cases = {
         "1": ("Daily Sync (24 hours)", lambda: daily_student_sync(24)),
         "2": ("Daily Sync (48 hours)", lambda: daily_student_sync(48)),
-        "3": ("Analyze Form Types", analyze_form_types),
-        "4": ("Field Coverage Analysis", compare_fields_coverage),
-        "5": ("Weekly Report", weekly_report),
-        "6": ("Scheduled Sync (Production)", scheduled_sync),
+        "3": ("Scheduled Sync (Production)", scheduled_sync),
     }
     
     if len(sys.argv) > 1 and sys.argv[1] in use_cases:
@@ -199,15 +102,13 @@ if __name__ == "__main__":
         print(f"\nRunning: {name}\n")
         func()
     else:
-        print("\nBusiness Use Case Examples")
+        print("\nBusiness Use Case: Daily Student Sync")
         print("="*60)
-        print("\nAvailable workflows:")
+        print("\nAvailable options:")
         for num, (name, _) in use_cases.items():
             print(f"  {num}. {name}")
         print("\nUsage:")
         print("  python example_business_use_case.py <number>")
-        print("\nExamples:")
-        print("  python example_business_use_case.py 1")
-        print("  python example_business_use_case.py 6 48")
+        print("  python example_business_use_case.py 3 <hours>")
         print()
 
