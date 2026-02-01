@@ -28,3 +28,5 @@ Thumbs.db
 *.log
 
 forms_csv/
+
+acuity_records.csv
