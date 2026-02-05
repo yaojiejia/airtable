@@ -5,8 +5,11 @@ Handles both the main log and form-specific CSV files.
 import csv
 import os
 import re
+from collections import defaultdict
 from datetime import datetime
-from typing import Dict, Optional
+from dateutil import parser as date_parser
+import pytz
+from typing import Dict, Optional, List
 from pathlib import Path
 
 from config import config
@@ -15,10 +18,26 @@ from config import config
 class CSVLogger:
     """Handles all CSV logging operations for Acuity appointments."""
     
-    def __init__(self):
-        """Initialize CSV logger and ensure directories/files exist."""
+    def __init__(
+        self,
+        form_type_keywords: Optional[List[str]] = None,
+        fallback_form_name: Optional[str] = None
+    ):
+        """
+        Initialize CSV logger and ensure directories/files exist.
+        
+        Args:
+            form_type_keywords: Optional list of keywords to identify form types
+                               in appointment names. If None, uses a generic approach.
+            fallback_form_name: Optional fallback name for forms that can't be categorized.
+                               If None, uses "unknown_form_type".
+        """
         self.log_file = config.CSV_LOG_FILE
         self.forms_dir = config.FORMS_CSV_DIR
+        
+        # Form name extraction configuration
+        self.form_type_keywords = form_type_keywords or []
+        self.fallback_form_name = fallback_form_name or "unknown_form_type"
         
         self._init_main_log()
         self._init_forms_directory()
@@ -70,7 +89,7 @@ class CSVLogger:
                     acuity_record.get('client_name', ''),
                     acuity_record.get('email', ''),
                     acuity_record.get('phone', ''),
-                    acuity_record.get('datetime', ''),
+                    self._format_datetime_to_est(acuity_record.get('datetime', '')),
                     acuity_record.get('appointment_type', ''),
                     'Cancelled' if action == 'CANCELLED' else 'Active',
                     'Yes' if action == 'CANCELLED' else 'No',
@@ -120,14 +139,22 @@ class CSVLogger:
         if not forms:
             return None
         
+        # Check if this is a reschedule by comparing with existing records
+        is_rescheduled = self._check_if_rescheduled(
+            acuity_record.get('appointment_id', ''),
+            self._format_datetime_to_est(acuity_record.get('datetime', '')),
+            acuity_record.get('canceled', False)
+        )
+        
         form_data = {
             'Sync Timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'Appointment ID': acuity_record.get('appointment_id', ''),
             'Client Name': acuity_record.get('client_name', ''),
             'Email': acuity_record.get('email', ''),
             'Phone': acuity_record.get('phone', ''),
-            'Appointment DateTime': acuity_record.get('datetime', ''),
-            'Canceled': 'Yes' if acuity_record.get('canceled', False) else 'No'
+            'Appointment DateTime': self._format_datetime_to_est(acuity_record.get('datetime', '')),
+            'Canceled': 'Yes' if acuity_record.get('canceled', False) else 'No',
+            'Rescheduled': 'Yes' if is_rescheduled else 'No'
         }
         
         # Add all form field Q&A
@@ -140,15 +167,79 @@ class CSVLogger:
         
         return form_data
     
+    def _check_if_rescheduled(self, appointment_id: str, current_datetime: str, is_canceled: bool) -> bool:
+        """
+        Check if an appointment has been rescheduled by comparing with existing CSV records.
+        
+        Args:
+            appointment_id: Appointment ID to check
+            current_datetime: Current appointment datetime (formatted)
+            is_canceled: Whether appointment is currently canceled
+            
+        Returns:
+            True if appointment was rescheduled or status changed
+        """
+        if not appointment_id:
+            return False
+        
+        # Find the CSV file for this appointment type
+        # We need to check all form CSV files since we don't know which one contains this appointment
+        if not os.path.exists(self.forms_dir):
+            return False
+        
+        try:
+            # Check all CSV files in the forms directory
+            for filename in os.listdir(self.forms_dir):
+                if not filename.endswith('.csv'):
+                    continue
+                
+                csv_filepath = os.path.join(self.forms_dir, filename)
+                try:
+                    with open(csv_filepath, 'r', newline='', encoding='utf-8') as f:
+                        reader = csv.DictReader(f)
+                        for row in reader:
+                            if row.get('Appointment ID', '') == appointment_id:
+                                # Found existing record - check if datetime or status changed
+                                existing_datetime = row.get('Appointment DateTime', '')
+                                existing_canceled = row.get('Canceled', 'No')
+                                current_canceled = 'Yes' if is_canceled else 'No'
+                                
+                                # If datetime changed or canceled status changed, it's a reschedule/change
+                                if existing_datetime != current_datetime or existing_canceled != current_canceled:
+                                    return True
+                except Exception:
+                    continue
+            
+            return False
+        except Exception:
+            return False
+    
     def _write_form_csv(self, filepath: str, form_data: Dict):
         """
         Write form data to CSV, handling dynamic headers.
+        Always appends new records, never overwrites existing ones.
         
         Args:
             filepath: Path to CSV file
             form_data: Dictionary of form data
         """
         file_exists = os.path.exists(filepath)
+        
+        # Check if this exact record already exists (all fields identical)
+        if file_exists:
+            try:
+                # Create signature for the new record
+                new_signature = self._create_record_signature(form_data)
+                
+                with open(filepath, 'r', newline='', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        existing_signature = self._create_record_signature(row)
+                        if existing_signature == new_signature:
+                            # Exact duplicate - skip it
+                            return
+            except Exception:
+                pass
         
         # Read existing headers if file exists
         existing_headers = []
@@ -181,10 +272,94 @@ class CSVLogger:
                     writer.writerow(form_data)
             except Exception as e:
                 print(f"[WARNING] Could not write to form CSV: {e}")
+        
+        # Fix rescheduled field after writing
+        self._fix_rescheduled_field_in_file(filepath)
+        
+        # Deduplicate records in the file
+        self._dedupe_csv_file(filepath)
+    
+    def _fix_rescheduled_field_in_file(self, filepath: str):
+        """
+        Fix the Rescheduled field in a CSV file after writing new records.
+        Marks records as rescheduled if they have the same appointment_id but different datetime.
+        
+        Args:
+            filepath: Path to CSV file
+        """
+        if not os.path.exists(filepath):
+            return
+        
+        try:
+            # Read all records
+            records = []
+            with open(filepath, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                headers = reader.fieldnames
+                
+                if 'Rescheduled' not in headers:
+                    return  # No Rescheduled column, skip
+                
+                records = list(reader)
+            
+            if not records:
+                return
+            
+            # Group records by appointment_id
+            records_by_appointment = defaultdict(list)
+            for i, record in enumerate(records):
+                apt_id = record.get('Appointment ID', '')
+                if apt_id:
+                    records_by_appointment[apt_id].append((i, record))
+            
+            # Track if any updates were made
+            updates_made = False
+            
+            # For each appointment_id with multiple records
+            for apt_id, record_list in records_by_appointment.items():
+                if len(record_list) <= 1:
+                    continue  # Only one record, can't be rescheduled
+                
+                # Get all unique datetimes for this appointment
+                datetimes = set()
+                for _, record in record_list:
+                    datetime_val = record.get('Appointment DateTime', '')
+                    if datetime_val:
+                        datetimes.add(datetime_val)
+                
+                # If there are multiple datetimes, mark all but the first as rescheduled
+                if len(datetimes) > 1:
+                    # Sort by Export Timestamp or Sync Timestamp to find the first one
+                    sorted_records = sorted(
+                        record_list, 
+                        key=lambda x: x[1].get('Export Timestamp', '') or x[1].get('Sync Timestamp', '')
+                    )
+                    
+                    # First record stays as "No" (or keep existing value if already "Yes")
+                    first_idx, first_record = sorted_records[0]
+                    first_datetime = first_record.get('Appointment DateTime', '')
+                    
+                    # Mark all others with different datetime as rescheduled
+                    for idx, record in sorted_records[1:]:
+                        record_datetime = record.get('Appointment DateTime', '')
+                        if record_datetime != first_datetime:
+                            if records[idx].get('Rescheduled', 'No') != 'Yes':
+                                records[idx]['Rescheduled'] = 'Yes'
+                                updates_made = True
+            
+            # Write updated records back if changes were made
+            if updates_made:
+                with open(filepath, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=headers)
+                    writer.writeheader()
+                    writer.writerows(records)
+        except Exception as e:
+            # Silently fail - don't break the export if fixing fails
+            pass
     
     def _rewrite_csv_with_new_headers(self, filepath: str, new_headers: list, new_row: Dict):
         """
-        Rewrite CSV file with updated headers.
+        Rewrite CSV file with updated headers, preserving all existing records.
         
         Args:
             filepath: Path to CSV file
@@ -200,13 +375,19 @@ class CSVLogger:
         except Exception as e:
             print(f"[WARNING] Could not read existing CSV: {e}")
         
-        # Rewrite file with new headers
+        # Rewrite file with new headers, preserving all existing records
         try:
             with open(filepath, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=new_headers)
                 writer.writeheader()
+                # Write all existing records (missing fields will be empty)
                 for row in existing_data:
+                    # Ensure all new headers are present in row
+                    for header in new_headers:
+                        if header not in row:
+                            row[header] = ''
                     writer.writerow(row)
+                # Add the new row
                 writer.writerow(new_row)
         except Exception as e:
             print(f"[WARNING] Could not rewrite CSV with new headers: {e}")
@@ -254,13 +435,13 @@ class CSVLogger:
             # Skip parts with names in parentheses (likely instructor names)
             if '(' in part and ')' in part:
                 before_paren = part.split('(')[0].strip()
-                if any(keyword in before_paren.lower() for keyword in config.FORM_TYPE_KEYWORDS):
+                if self.form_type_keywords and any(keyword in before_paren.lower() for keyword in self.form_type_keywords):
                     form_name = before_paren
                     break
                 continue
             
-            # Check if this part contains a session keyword
-            if any(keyword in part_lower for keyword in config.FORM_TYPE_KEYWORDS):
+            # Check if this part contains a session keyword (if keywords are configured)
+            if self.form_type_keywords and any(keyword in part_lower for keyword in self.form_type_keywords):
                 form_name = part
                 break
         
@@ -287,11 +468,11 @@ class CSVLogger:
             len(parts) <= 2 and
             len(appointment_type.split()) <= 4 and
             appointment_type[0].isupper() and
-            not any(keyword in appointment_type.lower() for keyword in config.FORM_TYPE_KEYWORDS)
+            (not self.form_type_keywords or not any(keyword in appointment_type.lower() for keyword in self.form_type_keywords))
         )
         
         if is_likely_name:
-            return "advisor_1_on_1_session"
+            return self.fallback_form_name
         
         # Filter out short parts and likely names
         meaningful_parts = [
@@ -302,7 +483,7 @@ class CSVLogger:
         if meaningful_parts:
             return meaningful_parts[0]
         
-        return appointment_type if appointment_type else "unknown_form_type"
+        return appointment_type if appointment_type else self.fallback_form_name
     
     def _clean_form_name(self, form_name: str) -> str:
         """
@@ -335,4 +516,120 @@ class CSVLogger:
             cleaned = cleaned[:100]
         
         return cleaned
+    
+    def _dedupe_csv_file(self, filepath: str):
+        """
+        Remove duplicate records from a CSV file.
+        Compares all fields (excluding timestamps) to identify duplicates.
+        Keeps the first occurrence of each unique record.
+        
+        Args:
+            filepath: Path to CSV file
+        """
+        if not os.path.exists(filepath):
+            return
+        
+        try:
+            # Read all records
+            records = []
+            seen_signatures = set()
+            duplicates_removed = 0
+            
+            with open(filepath, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                headers = reader.fieldnames
+                
+                for row in reader:
+                    signature = self._create_record_signature(row)
+                    
+                    if signature in seen_signatures:
+                        duplicates_removed += 1
+                    else:
+                        seen_signatures.add(signature)
+                        records.append(row)
+            
+            # Only rewrite if duplicates were found
+            if duplicates_removed > 0:
+                with open(filepath, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=headers)
+                    writer.writeheader()
+                    writer.writerows(records)
+        except Exception as e:
+            # Silently fail - don't break the export if deduplication fails
+            pass
+    
+    def _create_record_signature(self, row: Dict) -> str:
+        """
+        Create a unique signature from all field values (excluding timestamp fields).
+        Used for deduplication by comparing all columns.
+        
+        Args:
+            row: Dictionary of record data
+            
+        Returns:
+            String signature representing all field values
+        """
+        # Create a sorted tuple of all key-value pairs (excluding timestamp fields)
+        fields = []
+        timestamp_fields = {'Export Timestamp', 'Sync Timestamp', 'Timestamp'}
+        
+        for key, value in sorted(row.items()):
+            if key not in timestamp_fields:
+                # Normalize values: convert to string and strip whitespace
+                normalized_value = str(value).strip() if value is not None else ''
+                fields.append(f"{key}:{normalized_value}")
+        
+        # Create signature from all fields
+        return "|".join(fields)
+    
+    def _format_datetime_to_est(self, datetime_str: str) -> str:
+        """
+        Convert datetime string to EST timezone and format it nicely.
+        
+        Args:
+            datetime_str: ISO datetime string from Acuity (e.g., "2026-03-09T16:00:00-0400")
+            
+        Returns:
+            Formatted datetime string in EST (e.g., "March 9, 2026 4:00 PM EST")
+        """
+        if not datetime_str:
+            return ''
+        
+        try:
+            # Map timezone abbreviations to timezone objects for parsing
+            est_tz = pytz.timezone('US/Eastern')
+            tzinfos = {
+                'EST': est_tz,
+                'EDT': est_tz,
+                'CST': pytz.timezone('US/Central'),
+                'CDT': pytz.timezone('US/Central'),
+                'MST': pytz.timezone('US/Mountain'),
+                'MDT': pytz.timezone('US/Mountain'),
+                'PST': pytz.timezone('US/Pacific'),
+                'PDT': pytz.timezone('US/Pacific'),
+            }
+            
+            # Parse the datetime string with timezone info
+            dt = date_parser.parse(datetime_str, tzinfos=tzinfos)
+            
+            # Convert to EST/EDT (handles daylight saving automatically)
+            
+            # If datetime is timezone-aware, convert to EST
+            if dt.tzinfo is not None:
+                dt_est = dt.astimezone(est_tz)
+            else:
+                # If timezone-naive, assume UTC and convert to EST
+                dt_utc = pytz.utc.localize(dt)
+                dt_est = dt_utc.astimezone(est_tz)
+            
+            # Format: "March 9, 2026 4:00 PM EST" or "March 9, 2026 4:00 PM EDT"
+            timezone_abbr = dt_est.strftime('%Z')  # EST or EDT
+            formatted = dt_est.strftime('%B %d, %Y %I:%M %p') + f' {timezone_abbr}'
+            
+            return formatted
+            
+        except Exception as e:
+            # If parsing fails, return original string
+            print(f"[WARNING] Could not parse datetime '{datetime_str}': {e}")
+            return datetime_str
 

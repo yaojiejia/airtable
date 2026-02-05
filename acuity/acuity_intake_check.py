@@ -158,8 +158,6 @@ def main_one_record():
 
 
 if __name__ == "__main__":
-    import sys
-    
     try:
         # Check if credentials are loaded
         if not ACUITY_USER_ID or not ACUITY_API_KEY:

@@ -109,6 +109,7 @@ class AcuityClient:
         
         # Filter appointments client-side
         filtered_appointments = []
+        
         for apt in appointments:
             if self._should_include_appointment(apt, cutoff_datetime, include_canceled):
                 filtered_appointments.append(apt)
@@ -140,9 +141,31 @@ class AcuityClient:
         if not include_canceled and appointment.get("canceled", False):
             return False
         
-        # Check if within time window using datetimeCreated
+        # For cancelled appointments, be more lenient with datetime checking
+        is_canceled = appointment.get("canceled", False)
+        
+        # Try to get datetimeCreated first (form submission time)
         datetime_created = appointment.get("datetimeCreated")
+        
+        # If no datetimeCreated, try using appointment datetime as fallback
+        # This is especially important for cancelled appointments
         if not datetime_created:
+            if is_canceled and include_canceled:
+                # For cancelled appointments, use appointment datetime as fallback
+                datetime_created = appointment.get("datetime")
+                # If still no datetime, check if there's a cancellation date
+                if not datetime_created:
+                    # Try to use current time as fallback for very recent cancellations
+                    # This ensures we capture recently cancelled appointments
+                    return True  # Include if cancelled and we're including cancelled
+            else:
+                # For non-cancelled appointments, require datetimeCreated
+                return False
+        
+        if not datetime_created:
+            # If cancelled and including cancelled, still include it
+            if is_canceled and include_canceled:
+                return True
             return False
         
         try:
@@ -154,7 +177,7 @@ class AcuityClient:
             else:
                 apt_datetime_utc = apt_datetime.replace(tzinfo=timezone.utc)
             
-            # Only include if created after cutoff
+            # Only include if created/appointment date is after cutoff
             return apt_datetime_utc >= cutoff_datetime
             
         except Exception as e:

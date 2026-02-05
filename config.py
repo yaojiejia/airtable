@@ -43,13 +43,12 @@ class Config:
         'Email',
         'Phone',
         'Appointment DateTime',
-        'Canceled'
+        'Canceled',
+        'Rescheduled'
     ]
     
-    FORM_TYPE_KEYWORDS = [
-        'help desk', 'helpdesk', 'q&a', 'q & a', 'session',
-        'essentials', 'advising', 'workshop', 'clinic', 'appointment'
-    ]
+    # Note: FORM_TYPE_KEYWORDS and form name extraction logic are now configurable
+    # via CSVLogger initialization. See csv_logger.py for details.
     
     MULTI_SELECT_INDICATORS = ['check all that apply', 'select all']
     

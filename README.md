@@ -9,7 +9,10 @@ Python SDK for connecting Acuity Scheduling to Airtable. Provides high-level API
 - Switch between Airtable tables dynamically
 - Sync data from Acuity to Airtable automatically
 - Export to CSV with grouping by form type
+- Automatic deduplication and cancellation detection
 - Field mapping and comparison tools
+- Configurable form name extraction
+- Web interface via Streamlit
 
 ## Installation
 
@@ -63,6 +66,12 @@ sdk = AcuityAirtableSDK(
     airtable_api_key="your_key",
     airtable_base_id="appXXX",
     airtable_table_name="TableName"
+)
+
+# With custom form name extraction (optional)
+sdk = AcuityAirtableSDK(
+    form_type_keywords=['help desk', 'session', 'workshop'],  # Keywords to identify form types
+    fallback_form_name="default_form"  # Fallback name for uncategorized forms
 )
 ```
 
@@ -167,12 +176,20 @@ files = sdk.export_to_csv(
     hours=24,
     include_canceled=True,
     group_by_appointment_type=True,
-    output_dir="exports"
+    output_dir="exports",
+    detect_cancellations=True  # Automatically detect cancellations
 )
 
 # Single file
 files = sdk.export_to_csv(group_by_appointment_type=False)
 ```
+
+CSV export features:
+- Automatic deduplication
+- Rescheduled field detection
+- Cancellation detection (compares historical records)
+- EST timezone formatting
+- Form-specific CSV files with dynamic headers
 
 ### Compare Fields
 
@@ -241,34 +258,18 @@ print(f"Generated {len(files)} files")
 
 ## Running Examples
 
-### Generic SDK Examples
-
-```bash
-# See all examples
-python example.py
-
-# Run specific example
-python example.py 1  # Basic sync
-python example.py 2  # Explore forms
-python example.py 3  # CSV export
-```
-
 ### Business Use Case Example
 
 Implementation of your specific business logic:
 
 ```bash
-# See all options
+# Run sync with custom hours
+python example_business_use_case.py 24    # Last 24 hours
+python example_business_use_case.py 48    # Last 48 hours
+python example_business_use_case.py 20    # Last 20 hours
+
+# Defaults to 24 hours if no argument provided
 python example_business_use_case.py
-
-# Run daily sync (24 hours)
-python example_business_use_case.py 1
-
-# Run daily sync (48 hours)
-python example_business_use_case.py 2
-
-# Production scheduled sync
-python example_business_use_case.py 3 48
 ```
 
 This example demonstrates:
@@ -276,6 +277,7 @@ This example demonstrates:
 - Automatic "Last Update" timestamp
 - CSV export grouped by form type
 - Including cancelled appointments
+- Automatic cancellation detection
 - Production-ready with error handling
 
 ## Implementing Your Business Logic
@@ -288,7 +290,16 @@ The SDK is generic and doesn't include business-specific logic. Here's how to im
 from acuity_airtable_sdk import AcuityAirtableSDK
 
 def daily_student_sync(lookback_hours=24):
-    sdk = AcuityAirtableSDK()
+    # Customize form name extraction for your use case
+    form_type_keywords = [
+        'help desk', 'helpdesk', 'q&a', 'session',
+        'essentials', 'advising', 'workshop'
+    ]
+    
+    sdk = AcuityAirtableSDK(
+        form_type_keywords=form_type_keywords,
+        fallback_form_name="advisor_1_on_1_session"
+    )
     
     # Target your specific table
     sdk.airtable.use_table("Student Profile")
@@ -316,7 +327,21 @@ if __name__ == "__main__":
     daily_student_sync(48)
 ```
 
-See `example_business_use_case.py` for a complete implementation with error handling, analysis tools, and production scheduling.
+See `example_business_use_case.py` for a complete implementation with error handling and production scheduling.
+
+### Streamlit Web Interface
+
+A web interface is available for running syncs and viewing CSV exports:
+
+```bash
+streamlit run streamlit_app.py
+```
+
+Features:
+- Run sync with custom hours via web UI
+- View sync results and statistics
+- Browse and download CSV files
+- Interactive data viewing
 
 ## Project Structure
 
@@ -325,8 +350,8 @@ See `example_business_use_case.py` for a complete implementation with error hand
 ├── acuity_airtable_sdk.py          # Main SDK
 ├── config.py                        # Configuration
 ├── csv_logger.py                    # CSV operations
-├── example.py                       # Generic SDK examples
 ├── example_business_use_case.py    # Business logic example
+├── streamlit_app.py                 # Web interface
 ├── acuity/
 │   ├── acuity_client.py            # Acuity API client
 │   └── acuity_intake_check.py      # Legacy wrapper

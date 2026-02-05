@@ -1,24 +1,10 @@
-"""
-Business Use Case Example: Daily Student Profile Sync
-
-Demonstrates implementing your specific business logic using the generic SDK.
-"""
 import sys
+import traceback
 from datetime import datetime
 from acuity_airtable_sdk import AcuityAirtableSDK
 
 
 def daily_student_sync(lookback_hours=24):
-    """
-    Daily sync workflow for student profiles.
-    
-    Features:
-    - Fetch forms from last N hours
-    - Inject to Student Profile table in Airtable
-    - Add "Last Update" timestamp automatically
-    - Log all records to CSV grouped by form type
-    - Include cancelled appointments
-    """
     print("="*80)
     print("DAILY STUDENT PROFILE SYNC")
     print("="*80)
@@ -26,7 +12,15 @@ def daily_student_sync(lookback_hours=24):
     print(f"Lookback period: {lookback_hours} hours")
     print("="*80 + "\n")
     
-    sdk = AcuityAirtableSDK()
+    form_type_keywords = [
+        'help desk', 'helpdesk', 'q&a', 'q & a', 'session',
+        'essentials', 'advising', 'workshop', 'clinic', 'appointment'
+    ]
+    
+    sdk = AcuityAirtableSDK(
+        form_type_keywords=form_type_keywords,
+        fallback_form_name="advisor_1_on_1_session"
+    )
     
     sdk.airtable.use_table("Student Profile")
     
@@ -63,16 +57,23 @@ def daily_student_sync(lookback_hours=24):
     return results
 
 
-
-
-def scheduled_sync():
-    """
-    Production sync script for scheduled execution.
-    Runs once per day via Task Scheduler or cron.
-    """
+if __name__ == "__main__":
+    lookback_hours = 24
+    
+    if len(sys.argv) > 1:
+        try:
+            lookback_hours = int(sys.argv[1])
+        except ValueError:
+            print(f"Error: '{sys.argv[1]}' is not a valid number of hours")
+            print("\nUsage:")
+            print("  python example_business_use_case.py <hours>")
+            print("\nExamples:")
+            print("  python example_business_use_case.py 24")
+            print("  python example_business_use_case.py 48")
+            print("  python example_business_use_case.py 20")
+            sys.exit(1)
+    
     try:
-        lookback_hours = int(sys.argv[1]) if len(sys.argv) > 1 else 48
-        
         results = daily_student_sync(lookback_hours)
         
         if results['failed'] > 0:
@@ -85,30 +86,6 @@ def scheduled_sync():
         
     except Exception as e:
         print(f"ERROR: Sync failed - {e}")
-        import traceback
         traceback.print_exc()
         sys.exit(2)
-
-
-if __name__ == "__main__":
-    use_cases = {
-        "1": ("Daily Sync (24 hours)", lambda: daily_student_sync(24)),
-        "2": ("Daily Sync (48 hours)", lambda: daily_student_sync(48)),
-        "3": ("Scheduled Sync (Production)", scheduled_sync),
-    }
-    
-    if len(sys.argv) > 1 and sys.argv[1] in use_cases:
-        name, func = use_cases[sys.argv[1]]
-        print(f"\nRunning: {name}\n")
-        func()
-    else:
-        print("\nBusiness Use Case: Daily Student Sync")
-        print("="*60)
-        print("\nAvailable options:")
-        for num, (name, _) in use_cases.items():
-            print(f"  {num}. {name}")
-        print("\nUsage:")
-        print("  python example_business_use_case.py <number>")
-        print("  python example_business_use_case.py 3 <hours>")
-        print()
 
