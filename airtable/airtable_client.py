@@ -201,6 +201,11 @@ class FieldMapper:
         Returns:
             True if field is multi-select
         """
+        # Check if field is in the explicit multi-select fields list
+        if field_name.strip() in config.MULTI_SELECT_FIELDS:
+            return True
+        
+        # Check if field name contains multi-select indicators
         return any(indicator in field_name.lower() 
                   for indicator in config.MULTI_SELECT_INDICATORS)
     

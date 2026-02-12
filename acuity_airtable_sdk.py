@@ -340,11 +340,18 @@ class CSVSDK:
         # Read existing records if file exists (for deduplication)
         existing_records_signatures = set()
         existing_records_by_id = {}
+        existing_headers = []
         file_exists = os.path.exists(filepath)
         if file_exists:
             try:
                 with open(filepath, 'r', newline='', encoding='utf-8') as f:
                     reader = csv.DictReader(f)
+                    # Get existing headers (fieldnames might contain None values, so filter them)
+                    if reader.fieldnames:
+                        existing_headers = [h for h in reader.fieldnames if h and h != 'Export Timestamp']
+                        # Add existing headers to all_fields to preserve them
+                        all_fields.update(h for h in existing_headers if h)
+                    
                     for row in reader:
                         # Create signature from all field values (excluding Export Timestamp)
                         signature = self._create_record_signature(row)
@@ -365,8 +372,9 @@ class CSVSDK:
                 existing_records_signatures = set()
                 existing_records_by_id = {}
         
-        # Create header
-        headers = ['Export Timestamp'] + sorted(list(all_fields))
+        # Create header - filter out any None values before sorting
+        filtered_fields = [f for f in all_fields if f is not None and f != '']
+        headers = ['Export Timestamp'] + sorted(filtered_fields)
         
         # Determine which records are new or changed
         records_to_add = []

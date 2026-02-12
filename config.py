@@ -52,6 +52,9 @@ class Config:
     
     MULTI_SELECT_INDICATORS = ['check all that apply', 'select all']
     
+    # Specific fields that should be treated as multi-select
+    MULTI_SELECT_FIELDS = ['What is your current NYU status?']
+    
     DEFAULT_LOOKBACK_HOURS = 24
     MAX_APPOINTMENTS = 100
     MAX_AIRTABLE_RECORDS_TO_SCAN = 100

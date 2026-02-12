@@ -432,13 +432,16 @@ class CSVLogger:
             if re.match(r'^(free|paid|\$\d+)', part_lower):
                 continue
             
-            # Skip parts with names in parentheses (likely instructor names)
+            # Check for parts with names in parentheses (likely advisor/instructor names)
             if '(' in part and ')' in part:
                 before_paren = part.split('(')[0].strip()
+                # If the text before parentheses contains form keywords, use it
                 if self.form_type_keywords and any(keyword in before_paren.lower() for keyword in self.form_type_keywords):
                     form_name = before_paren
                     break
-                continue
+                # If it looks like a person's name (short, capitalized, no keywords), skip it
+                elif self._looks_like_person_name(before_paren):
+                    continue
             
             # Check if this part contains a session keyword (if keywords are configured)
             if self.form_type_keywords and any(keyword in part_lower for keyword in self.form_type_keywords):
@@ -450,6 +453,35 @@ class CSVLogger:
             form_name = self._fallback_form_name(parts)
         
         return form_name
+    
+    def _looks_like_person_name(self, text: str) -> bool:
+        """
+        Check if text looks like a person's name.
+        
+        Args:
+            text: Text to check
+            
+        Returns:
+            True if it looks like a person's name
+        """
+        # Short text (typically 2-4 words)
+        word_count = len(text.split())
+        if word_count > 5:
+            return False
+        
+        # Starts with capital letter
+        if not text or not text[0].isupper():
+            return False
+        
+        # Doesn't contain form keywords
+        if self.form_type_keywords and any(keyword in text.lower() for keyword in self.form_type_keywords):
+            return False
+        
+        # Common patterns for advisor appointments
+        if any(pattern in text.lower() for pattern in ['help desk', 'q&a', 'session', 'appointment', 'workshop']):
+            return False
+        
+        return True
     
     def _fallback_form_name(self, parts: list) -> str:
         """
@@ -463,7 +495,14 @@ class CSVLogger:
         """
         appointment_type = ' | '.join(parts)
         
-        # Check if this looks like a person's name
+        # Check if the first part (before any parentheses) looks like a person's name
+        first_part = parts[0] if parts else appointment_type
+        if '(' in first_part:
+            before_paren = first_part.split('(')[0].strip()
+            if self._looks_like_person_name(before_paren):
+                return self.fallback_form_name
+        
+        # Check if entire appointment type looks like a person's name
         is_likely_name = (
             len(parts) <= 2 and
             len(appointment_type.split()) <= 4 and
